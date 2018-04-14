@@ -23,7 +23,7 @@ as well as to verify your TL classifier.
 TODO (for Yousuf and Aaron): Stopline location for each traffic light.
 '''
 
-LOOKAHEAD_WPS = 200 # Number of waypoints we will publish. You can change this number
+LOOKAHEAD_WPS = 50 # Number of waypoints we will publish. You can change this number
 MAX_DECEL = 0.2
 
 
@@ -56,16 +56,11 @@ class WaypointUpdater(object):
     def loop(self):
         rate = rospy.Rate(50)
         while not rospy.is_shutdown():
-            if self.pose and self.base_lane:
-                # self.publish_waypoints()
-                closest_waypoint_idx = self.get_closest_waypoint_idx()
+            if self.pose and self.base_lane and self.waypoint_tree:
                 self.publish_waypoints()
             rate.sleep()
 
-    def get_closest_waypoint_idx(self):
-        if not self.waypoint_tree:
-            return -1
-
+    def get_closest_waypoint_idx(self):        
         x = self.pose.pose.position.x
         y = self.pose.pose.position.y
         closest_idx = self.waypoint_tree.query([x, y], 1)[1]
@@ -94,7 +89,7 @@ class WaypointUpdater(object):
         farthest_idx = closest_idx + LOOKAHEAD_WPS
         base_waypoints = self.base_lane.waypoints[closest_idx:farthest_idx]
 
-        if self.stopline_wp_idx == -1 or (self.stopline_wp_idx >= farthest_idx):
+        if self.stopline_wp_idx == -1 or ((self.stopline_wp_idx - 50) >= farthest_idx):
             lane.waypoints = base_waypoints
         else:
             lane.waypoints = self.decelerate_waypoints(base_waypoints, closest_idx)
@@ -112,10 +107,13 @@ class WaypointUpdater(object):
             p.pose = wp.pose
             stop_idx = max(self.stopline_wp_idx - closest_idx - 2, 0)
             dist = self.distance(waypoints, i, stop_idx)
-            vel = math.sqrt(2 * MAX_DECEL * dist)
-            if vel < 1.0:
+            vel = math.sqrt(0.1 * dist)
+            if vel < 2.0:
                 vel = 0.0
-
+            
+            if dist > 0:
+                rospy.logwarn("waypoints dist = {0} ## vel = {1}".format(dist, vel))
+            
             p.twist.twist.linear.x = min(vel, wp.twist.twist.linear.x)
             temp.append(p)
         return temp
@@ -146,10 +144,10 @@ class WaypointUpdater(object):
 
     def distance(self, waypoints, wp1, wp2):
         dist = 0
+        n = len(waypoints)
         dl = lambda a, b: math.sqrt((a.x-b.x)**2 + (a.y-b.y)**2  + (a.z-b.z)**2)
-        for i in range(wp1, wp2+1):
-            dist += dl(waypoints[wp1].pose.pose.position, waypoints[i].pose.pose.position)
-            wp1 = i
+        for i in range(wp1, wp2):
+            dist += dl(waypoints[i % n].pose.pose.position, waypoints[(i + 1) % n].pose.pose.position)
         return dist
 
 

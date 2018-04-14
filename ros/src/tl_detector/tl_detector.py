@@ -155,30 +155,34 @@ class TLDetector(object):
 
         """
 
-        if (not self.has_image):
-            return False
+        return light.state
 
-        cv_image = self.bridge.imgmsg_to_cv2(self.camera_image, "bgr8")
 
-        x, y = self.project_to_image_plane(light.pose.pose.position)
+        # if (not self.has_image):
+        #     return False
+        #
+        # cv_image = self.bridge.imgmsg_to_cv2(self.camera_image, "bgr8")
+        #
+        # x, y = self.project_to_image_plane(light.pose.pose.position)
+        #
+        # if (x < 0) or (y < 0) or (x >= cv_image.shape[1]) or (y >= cv_image.shape[0]):
+        #     return False
+        #
+        # imm = cv_image
+        # crop = 90
+        # xmin = x - crop if (x - crop) >= 0 else 0
+        # ymin = y - crop if (y - crop) >= 0 else 0
+        #
+        # xmax = x + crop if (x + crop) <= imm.shape[1] - 1 else imm.shape[1] - 1
+        # ymax = y + crop if (y + crop) <= imm.shape[0] - 1 else imm.shape[0] - 1
+        # imm_cropped = imm[ymin:ymax, xmin:xmax]
+        #
+        # # Get classification
+        # result = self.light_classifier.get_classification(imm_cropped)
+        # # rospy.logwarn("Traffic light detected: {0}".format(result))
+        #
+        # return result
 
-        if (x < 0) or (y < 0) or (x >= cv_image.shape[1]) or (y >= cv_image.shape[0]):
-            return False
-
-        imm = cv_image
-        crop = 90
-        xmin = x - crop if (x - crop) >= 0 else 0
-        ymin = y - crop if (y - crop) >= 0 else 0
-
-        xmax = x + crop if (x + crop) <= imm.shape[1] - 1 else imm.shape[1] - 1
-        ymax = y + crop if (y + crop) <= imm.shape[0] - 1 else imm.shape[0] - 1
-        imm_cropped = imm[ymin:ymax, xmin:xmax]
-
-        # Get classification
-        result = self.light_classifier.get_classification(imm_cropped)
-        # rospy.logwarn("Traffic light detected: {0}".format(result))
-
-        return result
         # return light.state
         # if(not self.has_image):
         #     self.prev_light_loc = None
@@ -203,13 +207,13 @@ class TLDetector(object):
 
         # List of positions that correspond to the line to stop in front of for a given intersection
         stop_line_positions = self.config['stop_line_positions']
-        if(self.pose):
+        if self.pose:
             car_wp_idx = self.get_closest_waypoint(self.pose.pose.position.x, self.pose.pose.position.y)
             diff = len(self.waypoints.waypoints)
             for i, light in enumerate(self.lights):
                 line = stop_line_positions[i]
                 temp_wp_idx = self.get_closest_waypoint(line[0], line[1])
-                d = temp_wp_idx - car_wp_idx
+                d = temp_wp_idx - car_wp_idx + 2
                 if d >= 0 and d < diff:
                     diff = d
                     closest_light = light
