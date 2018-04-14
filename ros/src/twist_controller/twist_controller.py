@@ -59,7 +59,6 @@ class Controller(object):
 
         throttle = self.throttle_controller.step(vel_error, sample_time)
 
-
         brake = 0
         if linear_vel == 0.0 and current_vel < 0.1:
             throttle = 0.0

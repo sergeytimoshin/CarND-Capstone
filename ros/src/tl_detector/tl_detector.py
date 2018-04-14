@@ -45,7 +45,7 @@ class TLDetector(object):
         self.upcoming_red_light_pub = rospy.Publisher('/traffic_waypoint', Int32, queue_size=1)
 
         self.bridge = CvBridge()
-        self.light_classifier = TLClassifier()
+        self.light_classifier = TLClassifier()        
         self.listener = tf.TransformListener()
 
         self.state = TrafficLight.UNKNOWN
@@ -85,7 +85,7 @@ class TLDetector(object):
         of times till we start using it. Otherwise the previous stable state is
         used.
         '''
-        if self.state != state:
+        if self.state and self.state != state:
             self.state_count = 0
             self.state = state
         elif self.state_count >= STATE_COUNT_THRESHOLD:
@@ -110,40 +110,6 @@ class TLDetector(object):
         closest_idx = self.waypoints_tree.query([x, y], 1)[1]
         return closest_idx
 
-    def project_to_image_plane(self, point_in_world):
-        """Project point from 3D world coordinates to 2D camera image location
-        """
-
-        image_width = self.config['camera_info']['image_width']
-        image_height = self.config['camera_info']['image_height']
-        # get transform between pose of camera and world frame
-
-        x = y = -1
-
-        try:
-            now = rospy.Time.now()
-            self.listener.waitForTransform("/base_link",
-                                           "/world", now, rospy.Duration(1.0))
-            (trans, rot) = self.listener.lookupTransform("/base_link",
-                                                         "/world", now)
-
-            # Use tranform and rotation to calculate 2D position of light in image
-            f = 2300
-            x_offset = -30
-            y_offset = 340
-            piw = PyKDL.Vector(point_in_world.x, point_in_world.y, point_in_world.z)
-            R = PyKDL.Rotation.Quaternion(*rot)
-            T = PyKDL.Vector(*trans)
-            p_car = R * piw + T
-
-            x = -p_car[1] / p_car[0] * f + image_width / 2 + x_offset
-            y = -p_car[2] / p_car[0] * f + image_height / 2 + y_offset
-
-        except (tf.Exception, tf.LookupException, tf.ConnectivityException):
-            rospy.logerr("Failed to find camera to map transform")
-
-        return int(x), int(y)
-
     def get_light_state(self, light):
         """Determines the current color of the traffic light
 
@@ -154,44 +120,11 @@ class TLDetector(object):
             int: ID of traffic light color (specified in styx_msgs/TrafficLight)
 
         """
+        if(not self.has_image):
+            return TrafficLight.UNKNOWN
 
-        return light.state
-
-
-        # if (not self.has_image):
-        #     return False
-        #
-        # cv_image = self.bridge.imgmsg_to_cv2(self.camera_image, "bgr8")
-        #
-        # x, y = self.project_to_image_plane(light.pose.pose.position)
-        #
-        # if (x < 0) or (y < 0) or (x >= cv_image.shape[1]) or (y >= cv_image.shape[0]):
-        #     return False
-        #
-        # imm = cv_image
-        # crop = 90
-        # xmin = x - crop if (x - crop) >= 0 else 0
-        # ymin = y - crop if (y - crop) >= 0 else 0
-        #
-        # xmax = x + crop if (x + crop) <= imm.shape[1] - 1 else imm.shape[1] - 1
-        # ymax = y + crop if (y + crop) <= imm.shape[0] - 1 else imm.shape[0] - 1
-        # imm_cropped = imm[ymin:ymax, xmin:xmax]
-        #
-        # # Get classification
-        # result = self.light_classifier.get_classification(imm_cropped)
-        # # rospy.logwarn("Traffic light detected: {0}".format(result))
-        #
-        # return result
-
-        # return light.state
-        # if(not self.has_image):
-        #     self.prev_light_loc = None
-        #     return False
-
-        # cv_image = self.bridge.imgmsg_to_cv2(self.camera_image, "bgr8")
-
-        # #Get classification
-        # return self.light_classifier.get_classification(cv_image)
+        cv_image = self.bridge.imgmsg_to_cv2(self.camera_image, "bgr8")
+        return self.light_classifier.get_classification(cv_image)
 
     def process_traffic_lights(self):
         """Finds closest visible traffic light, if one exists, and determines its
