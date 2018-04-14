@@ -110,10 +110,7 @@ class WaypointUpdater(object):
             vel = math.sqrt(0.1 * dist)
             if vel < 2.0:
                 vel = 0.0
-            
-            if dist > 0:
-                rospy.logwarn("waypoints dist = {0} ## vel = {1}".format(dist, vel))
-            
+                        
             p.twist.twist.linear.x = min(vel, wp.twist.twist.linear.x)
             temp.append(p)
         return temp
