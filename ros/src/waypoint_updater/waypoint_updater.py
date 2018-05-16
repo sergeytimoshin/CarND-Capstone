@@ -24,7 +24,7 @@ TODO (for Yousuf and Aaron): Stopline location for each traffic light.
 '''
 
 LOOKAHEAD_WPS = 70 # Number of waypoints we will publish. You can change this number
-
+MAX_DECEL = 0.5
 
 class WaypointUpdater(object):
     def __init__(self):
@@ -96,69 +96,29 @@ class WaypointUpdater(object):
         farthest_idx = closest_idx + LOOKAHEAD_WPS
         waypoints = self.base_waypoints.waypoints[closest_idx:farthest_idx]
 
-        if self.stopline_wp_idx != -1 and closest_idx <= self.stopline_wp_idx <= farthest_idx:
-            self.slow_down = True
-            waypoints = self.decelerate(waypoints, closest_idx)
-        elif self.slow_down:
-            self.slow_down = False
+        if self.stopline_wp_idx == -1 or (self.stopline_wp_idx >= farthest_idx):
+            lane.waypoints = waypoints
+        else:
+            lane.waypoints = self.decelerate(waypoints, closest_idx)
 
-        if not self.slow_down:
-            if abs(self.vehicle_velocity - self.get_waypoint_velocity(waypoints[0])) > 1.0:
-                start_velocity = max(self.previous_velocity + 0.5, self.vehicle_velocity)
-                waypoints = self.accelerate(waypoints, start_velocity)
-
-        lane.waypoints = waypoints
         return lane
 
-    def accelerate(self, waypoints, start_velocity):
-        lane_waypoints = []
-        prev_velocity = start_velocity
-        for i, waypoint in enumerate(waypoints):
-            p = Waypoint()
-            p.pose = waypoint.pose
-
-            velocity = prev_velocity + 0.5
-            prev_velocity = velocity
-
-            if velocity < 0.5:
-                velocity = 0.5
-
-            velocity = min(velocity, self.get_waypoint_velocity(waypoint))
-            p.twist.twist.linear.x = velocity
-            lane_waypoints.append(p)
-        return lane_waypoints
-
-
     def decelerate(self, waypoints, closest_idx):
-        tl_idx = self.stopline_wp_idx - closest_idx - 2
-        # rospy.logwarn("waypoints.count = {0} ## tl_idx = {1}".format(len(waypoints), tl_idx))
-
-        velocity = self.vehicle_velocity
-        deccel = velocity / (self.distance(waypoints, 0, tl_idx) + 1.1)
-
-        rospy.logwarn("vel = {0} ## deccel = {1}".format(velocity, deccel))
-
-        processed_waypoints = []
-        for i, waypoint in enumerate(waypoints):
+        temp = []
+        for i, wp in enumerate(waypoints):
             p = Waypoint()
-            p.pose = waypoint.pose
+            p.pose = wp.pose
 
-            if i >= tl_idx:
-                velocity = 0
+            stop_idx = max(self.stopline_wp_idx - closest_idx - 2, 0)
+            dist = self.distance(waypoints, i, stop_idx)
+            vel = math.sqrt(2 * MAX_DECEL * dist)
+            if vel < 1:
+                vel = 0.0
 
-            distance = self.distance(waypoints, i, tl_idx)
-            if distance < 40:
-                velocity = distance * deccel * 0.1
+            p.twist.twist.linear.x = min(vel, wp.twist.twist.linear.x)
+            temp.append(p)
 
-            velocity = min(velocity, self.get_waypoint_velocity(waypoint))
-
-            if velocity <= 3:
-               velocity = 0
-
-            rospy.logwarn("new velocity = {0}".format(velocity))
-            p.twist.twist.linear.x = velocity
-            processed_waypoints.append(p)
-        return processed_waypoints
+        return temp
 
     def pose_cb(self, msg):
         self.pose = msg
